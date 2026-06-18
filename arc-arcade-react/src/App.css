@@ -1,0 +1,45 @@
+body { 
+    background-color: #0F172A; 
+    color: #F1F5F9; 
+    font-family: 'Syne', sans-serif; 
+    overflow-x: hidden; 
+    touch-action: manipulation; 
+}
+
+.mono { 
+    font-family: 'DM Mono', monospace; 
+}
+
+.glass-panel { 
+    background: #1E293B; 
+    border: 1px solid #334155; 
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); 
+}
+
+#gameCanvas {
+    background: #020617; 
+    border: 2px solid #38BDF8;
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.9), 0 0 20px rgba(56, 189, 248, 0.2);
+    border-radius: 12px;
+    display: block;
+    margin: 0 auto;
+}
+
+@keyframes sweep {
+    0% { left: -100%; }
+    100% { left: 200%; }
+}
+
+.holo-sweep {
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.4), transparent);
+    animation: sweep 2.5s infinite linear;
+}
+
+.nft-item { 
+    transition: transform 0.3s ease, box-shadow 0.3s ease; 
+}
+
+.nft-item:hover { 
+    transform: translateY(-5px); 
+    box-shadow: 0 10px 25px rgba(56, 189, 248, 0.3); 
+}
