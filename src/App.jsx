@@ -16,23 +16,24 @@ export default function App() {
     // Variables mutables pour la boucle de jeu
     const gameState = useRef({
         score: 0,
-        TARGET_SCORE: 20,
+        TARGET_SCORE: 40, // NOUVEAU: 40 pièces pour gagner (20 par niveau)
+        level: 1,         // NOUVEAU: Suivi du niveau
         player: { x: 135, y: 280, targetY: 280, size: 30 },
+        hasShield: false,
         bullets: [],
         enemies: [],
         coins: [],
         stars: [],
+        powerups: [],
         keys: { ArrowLeft: false, ArrowRight: false },
         lastShot: 0
     });
 
     // --- INITIALISATION ---
     useEffect(() => {
-        // Chargement des crédits depuis le localStorage du navigateur
         const savedCredits = parseInt(localStorage.getItem('arc_credits_web2')) || 3;
         setCredits(savedCredits);
         
-        // Initialisation des étoiles
         const initStars = () => {
             const stars = [];
             for (let i = 0; i < 50; i++) {
@@ -62,21 +63,24 @@ export default function App() {
         setCredits(prev => prev - 1);
         
         gameState.current.score = 0;
+        gameState.current.level = 1;
         gameState.current.player.x = 135;
         gameState.current.player.y = 280;
         gameState.current.player.targetY = 280;
+        gameState.current.hasShield = false;
         gameState.current.bullets = [];
         gameState.current.enemies = [];
         gameState.current.coins = [];
+        gameState.current.powerups = [];
         
         setGameActive(true);
-        setStatusMsg({ text: "🚀 In hyperspace! Collect 20 coins.", type: "info" });
+        setStatusMsg({ text: "🚀 Level 1! Collect 20 coins to upgrade.", type: "info" });
     };
 
     const endGame = (won) => {
         setGameActive(false);
         if (won) {
-            setStatusMsg({ text: "✨ Sector secured!", type: "success" });
+            setStatusMsg({ text: "✨ Sector secured! Game Completed!", type: "success" });
             triggerConfetti();
             setTimeout(() => { setShowWinModal(true); }, 1000);
         } else {
@@ -132,14 +136,27 @@ export default function App() {
             if (state.keys.ArrowLeft && state.player.x > 0) state.player.x -= 4;
             if (state.keys.ArrowRight && state.player.x < canvas.width - state.player.size) state.player.x += 4;
             
-            // Tir automatique : plus besoin d'appuyer sur Espace
+            // Tir automatique
             if (Date.now() - state.lastShot > 250 && gameActive) { 
                 state.bullets.push({ x: state.player.x + 10, y: state.player.y }); 
                 state.lastShot = Date.now(); 
             }
 
-            // Dessiner joueur
-            ctx.save(); ctx.font = '28px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            // --- DESSINER LE JOUEUR ---
+            ctx.save();
+            
+            // Aura du bouclier
+            if (state.hasShield) {
+                ctx.beginPath();
+                ctx.arc(state.player.x + 15, state.player.y + 15, 25, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+                ctx.fill();
+                ctx.strokeStyle = '#38BDF8';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            ctx.font = '28px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             let flameY = 41 + Math.sin(Date.now() / 80) * 2; 
             
             ctx.save();
@@ -153,6 +170,8 @@ export default function App() {
             ctx.rotate(-45 * Math.PI / 180); 
             ctx.fillText('🚀', 0, 0); 
             ctx.restore();
+            
+            ctx.restore();
 
             if (gameActive) {
                 // Balles
@@ -162,8 +181,10 @@ export default function App() {
                     if (b.y < 0) state.bullets.splice(index, 1);
                 });
 
-                // Ennemis
-                if (Math.random() < 0.04) state.enemies.push({ x: Math.random() * (canvas.width - 30), y: -30 });
+                // Ennemis (Plus nombreux au niveau 2)
+                const enemySpawnRate = state.level === 2 ? 0.055 : 0.04;
+                if (Math.random() < enemySpawnRate) state.enemies.push({ x: Math.random() * (canvas.width - 30), y: -30 });
+                
                 state.enemies.forEach((e, i) => {
                     e.y += 2.2; ctx.font = '28px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
                     ctx.fillText('👾', e.x, e.y + 25);
@@ -176,19 +197,50 @@ export default function App() {
                         }
                     });
                     
-                    // Collision joueur
+                    // Collision joueur / ennemi
                     if (e.y + 15 > state.player.y && e.y < state.player.y + 20 && e.x + 15 > state.player.x && e.x < state.player.x + 20) {
-                        endGame(false);
+                        if (state.hasShield) {
+                            state.hasShield = false;
+                            state.enemies.splice(i, 1);
+                        } else {
+                            endGame(false);
+                        }
+                    } else if (e.y > canvas.height) {
+                        state.enemies.splice(i, 1);
                     }
-                    if (e.y > canvas.height) state.enemies.splice(i, 1);
                 });
 
-                // Pièces
+                // Bonus : Boucliers (Tombent UNIQUEMENT au Niveau 2)
+                if (state.level >= 2 && Math.random() < 0.003) state.powerups.push({ x: Math.random() * (canvas.width - 30), y: -30 });
+                state.powerups.forEach((p, i) => {
+                    p.y += 1.8; 
+                    ctx.font = '22px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+                    ctx.fillText('🛡️', p.x, p.y + 25);
+
+                    // Joueur ramasse le bouclier
+                    if (p.y + 20 > state.player.y && p.y < state.player.y + 20 && p.x + 20 > state.player.x && p.x < state.player.x + 20) {
+                        state.hasShield = true;
+                        state.powerups.splice(i, 1); 
+                    } else if (p.y > canvas.height) {
+                        state.powerups.splice(i, 1); 
+                    }
+                });
+
+                // Pièces et changement de niveau
                 state.coins.forEach((c, i) => {
                     c.y += 2.5; ctx.fillText('🪙', c.x, c.y + 25);
                     if (c.y + 20 > state.player.y && c.y < state.player.y + 20 && c.x + 20 > state.player.x && c.x < state.player.x + 20) {
                         state.coins.splice(i, 1); 
                         state.score++; 
+                        
+                        // TRANSITION NIVEAU 2
+                        if (state.score === 20 && state.level === 1) {
+                            state.level = 2;
+                            // Fait tomber un bouclier gratuit exactement au milieu en récompense !
+                            state.powerups.push({ x: canvas.width / 2 - 15, y: -30 });
+                            setStatusMsg({ text: "⚠️ LEVEL 2! Enemies approaching faster!", type: "warning" });
+                        }
+                        
                         if (state.score >= state.TARGET_SCORE) {
                             endGame(true);
                         }
@@ -198,9 +250,9 @@ export default function App() {
                 });
             }
 
-            // HUD UI
+            // HUD UI (Mise à jour avec l'affichage du niveau)
             ctx.fillStyle = '#FBBF24'; ctx.font = 'bold 14px Courier New'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-            ctx.fillText(`TARGETS: ${state.score}/${state.TARGET_SCORE}`, 10, 25);
+            ctx.fillText(`LVL ${state.level} | TARGETS: ${state.score}/${state.TARGET_SCORE}`, 10, 25);
             const progress = (state.score / state.TARGET_SCORE) * 100;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fillRect(10, 35, 100, 4);
             ctx.fillStyle = '#10B981'; ctx.fillRect(10, 35, progress, 4);
@@ -212,10 +264,10 @@ export default function App() {
         return () => cancelAnimationFrame(requestRef.current);
     }, [gameActive]);
 
-    // Helpers pour l'interface
     const getStatusColor = (type) => {
         if (type === 'error') return '#EF4444';
         if (type === 'success') return '#10B981';
+        if (type === 'warning') return '#FBBF24';
         return '#38BDF8';
     };
 
