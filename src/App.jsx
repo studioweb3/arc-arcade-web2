@@ -85,7 +85,7 @@ export default function App() {
         }
     };
 
-    // Gestion du clavier
+    // Gestion du clavier (PC)
     useEffect(() => {
         const handleKeyDown = (e) => {
             if(e.code === 'ArrowLeft') gameState.current.keys.ArrowLeft = true;
@@ -128,7 +128,7 @@ export default function App() {
             }
             state.player.y += (state.player.targetY - state.player.y) * 0.05;
 
-            // Déplacements joueur
+            // Déplacements joueur (via clavier PC)
             if (state.keys.ArrowLeft && state.player.x > 0) state.player.x -= 4;
             if (state.keys.ArrowRight && state.player.x < canvas.width - state.player.size) state.player.x += 4;
             
@@ -243,10 +243,36 @@ export default function App() {
                     </div>
 
                     <div className="mb-6 relative">
-                        <canvas ref={canvasRef} width="300" height="350" id="gameCanvas" className="mx-auto rounded-xl shadow-lg shadow-sky-900/20"></canvas>
+                        <canvas 
+                            ref={canvasRef} 
+                            width="300" 
+                            height="350" 
+                            id="gameCanvas" 
+                            className="mx-auto rounded-xl shadow-lg shadow-sky-900/20 touch-none cursor-crosshair"
+                            onTouchMove={(e) => {
+                                if (!gameActive) return;
+                                const rect = canvasRef.current.getBoundingClientRect();
+                                const scaleX = 300 / rect.width;
+                                let newX = (e.touches[0].clientX - rect.left) * scaleX - 15;
+                                if (newX < 0) newX = 0;
+                                if (newX > 270) newX = 270;
+                                gameState.current.player.x = newX;
+                            }}
+                            onMouseMove={(e) => {
+                                if (!gameActive) return;
+                                if (e.buttons === 1) { 
+                                    const rect = canvasRef.current.getBoundingClientRect();
+                                    const scaleX = 300 / rect.width;
+                                    let newX = (e.clientX - rect.left) * scaleX - 15;
+                                    if (newX < 0) newX = 0;
+                                    if (newX > 270) newX = 270;
+                                    gameState.current.player.x = newX;
+                                }
+                            }}
+                        ></canvas>
                         
                         {!gameActive && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/60 rounded-xl">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/60 rounded-xl pointer-events-none">
                             {gameState.current.score > 0 && gameState.current.score < gameState.current.TARGET_SCORE ? (
                                 <>
                                     <p className="text-red-500 font-bold text-xl mb-1">HULL DESTROYED 💥</p>
@@ -258,28 +284,9 @@ export default function App() {
                                 <p className="text-white font-bold mb-2 text-lg drop-shadow-md">Ready for takeoff?</p>
                             )}
                             <p className="text-slate-300 text-xs mono mb-4">Insert 1 🪙 to start</p>
-                            <p className="text-sky-400 text-[10px] mono uppercase tracking-tighter">⬅️ ➡️ Move | 🚀 Auto-Fire</p>
+                            <p className="text-sky-400 text-[10px] mono uppercase tracking-tighter">👆 Glisse pour bouger | 🚀 Auto-Fire</p>
                         </div>
                         )}
-                    </div>
-
-                    <div className="sm:hidden flex justify-between gap-3 mb-4 w-full relative z-10">
-                        <button 
-                            onTouchStart={(e) => { e.preventDefault(); gameState.current.keys.ArrowLeft = true; }}
-                            onTouchEnd={(e) => { e.preventDefault(); gameState.current.keys.ArrowLeft = false; }}
-                            onMouseDown={(e) => { e.preventDefault(); gameState.current.keys.ArrowLeft = true; }}
-                            onMouseUp={(e) => { e.preventDefault(); gameState.current.keys.ArrowLeft = false; }}
-                            onMouseLeave={(e) => { e.preventDefault(); gameState.current.keys.ArrowLeft = false; }}
-                            className="bg-slate-700 hover:bg-slate-600 text-white p-4 rounded-xl flex-1 text-3xl active:bg-sky-500 transition select-none touch-manipulation shadow-lg"
-                        >⬅️</button>
-                        <button 
-                            onTouchStart={(e) => { e.preventDefault(); gameState.current.keys.ArrowRight = true; }}
-                            onTouchEnd={(e) => { e.preventDefault(); gameState.current.keys.ArrowRight = false; }}
-                            onMouseDown={(e) => { e.preventDefault(); gameState.current.keys.ArrowRight = true; }}
-                            onMouseUp={(e) => { e.preventDefault(); gameState.current.keys.ArrowRight = false; }}
-                            onMouseLeave={(e) => { e.preventDefault(); gameState.current.keys.ArrowRight = false; }}
-                            className="bg-slate-700 hover:bg-slate-600 text-white p-4 rounded-xl flex-1 text-3xl active:bg-sky-500 transition select-none touch-manipulation shadow-lg"
-                        >➡️</button>
                     </div>
 
                     {!gameActive && credits === 0 && (
