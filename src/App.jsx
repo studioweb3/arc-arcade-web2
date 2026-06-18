@@ -16,8 +16,8 @@ export default function App() {
     // Variables mutables pour la boucle de jeu
     const gameState = useRef({
         score: 0,
-        TARGET_SCORE: 40, // NOUVEAU: 40 pièces pour gagner (20 par niveau)
-        level: 1,         // NOUVEAU: Suivi du niveau
+        TARGET_SCORE: 40, // 20 pièces LVL 1 + 20 pièces LVL 2 = Boss
+        level: 1,
         player: { x: 135, y: 280, targetY: 280, size: 30 },
         hasShield: false,
         bullets: [],
@@ -25,6 +25,8 @@ export default function App() {
         coins: [],
         stars: [],
         powerups: [],
+        // NOUVEAU : Le Boss
+        boss: { active: false, x: 150, y: 60, hp: 30, maxHp: 30, direction: 1, lastShot: 0, bullets: [] },
         keys: { ArrowLeft: false, ArrowRight: false },
         lastShot: 0
     });
@@ -72,15 +74,16 @@ export default function App() {
         gameState.current.enemies = [];
         gameState.current.coins = [];
         gameState.current.powerups = [];
+        gameState.current.boss = { active: false, x: 150, y: 60, hp: 30, maxHp: 30, direction: 1, lastShot: 0, bullets: [] };
         
         setGameActive(true);
-        setStatusMsg({ text: "🚀 Level 1! Collect 20 coins to upgrade.", type: "info" });
+        setStatusMsg({ text: "🚀 Level 1! Collect 20 coins.", type: "info" });
     };
 
     const endGame = (won) => {
         setGameActive(false);
         if (won) {
-            setStatusMsg({ text: "✨ Sector secured! Game Completed!", type: "success" });
+            setStatusMsg({ text: "✨ BOSS DEFEATED! Sector secured!", type: "success" });
             triggerConfetti();
             setTimeout(() => { setShowWinModal(true); }, 1000);
         } else {
@@ -124,11 +127,13 @@ export default function App() {
             // Dessiner les étoiles
             state.stars.forEach(s => {
                 ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
-                s.y += s.speed; if (s.y > canvas.height) s.y = 0;
+                s.y += (state.boss.active ? s.speed * 2 : s.speed); // Effet hyper-vitesse pendant le boss
+                if (s.y > canvas.height) s.y = 0;
             });
 
             if (gameActive) {
-                state.player.targetY = 280 - (state.score / state.TARGET_SCORE) * 230;
+                // Le joueur monte légèrement quand le boss apparaît pour l'effet dramatique
+                state.player.targetY = state.boss.active ? 300 : 280 - (state.score / state.TARGET_SCORE) * 200;
             }
             state.player.y += (state.player.targetY - state.player.y) * 0.05;
 
@@ -136,7 +141,7 @@ export default function App() {
             if (state.keys.ArrowLeft && state.player.x > 0) state.player.x -= 4;
             if (state.keys.ArrowRight && state.player.x < canvas.width - state.player.size) state.player.x += 4;
             
-            // Tir automatique
+            // Tir automatique du joueur
             if (Date.now() - state.lastShot > 250 && gameActive) { 
                 state.bullets.push({ x: state.player.x + 10, y: state.player.y }); 
                 state.lastShot = Date.now(); 
@@ -144,8 +149,6 @@ export default function App() {
 
             // --- DESSINER LE JOUEUR ---
             ctx.save();
-            
-            // Aura du bouclier
             if (state.hasShield) {
                 ctx.beginPath();
                 ctx.arc(state.player.x + 15, state.player.y + 15, 25, 0, Math.PI * 2);
@@ -170,54 +173,125 @@ export default function App() {
             ctx.rotate(-45 * Math.PI / 180); 
             ctx.fillText('🚀', 0, 0); 
             ctx.restore();
-            
             ctx.restore();
 
             if (gameActive) {
-                // Balles
+                // --- LOGIQUE DES BALLES DU JOUEUR ---
                 state.bullets.forEach((b, index) => {
-                    b.y -= 8; ctx.fillStyle = '#22D3EE'; ctx.shadowBlur = 10; ctx.shadowColor = '#22D3EE';
+                    b.y -= 8; 
+                    ctx.fillStyle = '#22D3EE'; ctx.shadowBlur = 10; ctx.shadowColor = '#22D3EE';
                     ctx.fillRect(b.x + 4, b.y, 3, 15); ctx.shadowBlur = 0;
-                    if (b.y < 0) state.bullets.splice(index, 1);
+                    
+                    let bulletRemoved = false;
+
+                    // Collision des balles avec le Boss
+                    if (state.boss.active) {
+                        const floatY = state.boss.y + Math.sin(Date.now() / 200) * 10;
+                        if (b.x > state.boss.x - 30 && b.x < state.boss.x + 30 && b.y > floatY - 20 && b.y < floatY + 20) {
+                            state.boss.hp--;
+                            state.bullets.splice(index, 1);
+                            bulletRemoved = true;
+                            
+                            // Explosion si mort !
+                            if (state.boss.hp <= 0) {
+                                endGame(true);
+                            }
+                        }
+                    }
+
+                    if (!bulletRemoved && b.y < 0) state.bullets.splice(index, 1);
                 });
 
-                // Ennemis (Plus nombreux au niveau 2)
-                const enemySpawnRate = state.level === 2 ? 0.055 : 0.04;
-                if (Math.random() < enemySpawnRate) state.enemies.push({ x: Math.random() * (canvas.width - 30), y: -30 });
-                
-                state.enemies.forEach((e, i) => {
-                    e.y += 2.2; ctx.font = '28px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-                    ctx.fillText('👾', e.x, e.y + 25);
+                // --- GESTION DU BOSS (NIVEAU 3) ---
+                if (state.boss.active) {
+                    const boss = state.boss;
                     
-                    state.bullets.forEach((b, bi) => {
-                        if (b.x > e.x - 5 && b.x < e.x + 25 && b.y > e.y && b.y < e.y + 30) {
-                            state.coins.push({ x: e.x, y: e.y }); 
-                            state.bullets.splice(bi, 1); 
+                    // Déplacement
+                    boss.x += 2.5 * boss.direction;
+                    if (boss.x <= 30) boss.direction = 1;
+                    if (boss.x >= canvas.width - 30) boss.direction = -1;
+
+                    const floatY = boss.y + Math.sin(Date.now() / 200) * 10;
+
+                    // Dessiner le Boss
+                    ctx.save();
+                    ctx.font = '50px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🛸', boss.x, floatY);
+                    ctx.restore();
+
+                    // Barre de vie du Boss
+                    ctx.fillStyle = '#EF4444'; // Rouge de fond
+                    ctx.fillRect(boss.x - 25, floatY - 40, 50, 4);
+                    ctx.fillStyle = '#10B981'; // Vert par dessus
+                    ctx.fillRect(boss.x - 25, floatY - 40, (boss.hp / boss.maxHp) * 50, 4);
+
+                    // Tirs du Boss (Double laser toutes les 0.6s)
+                    if (Date.now() - boss.lastShot > 600) {
+                        boss.bullets.push({ x: boss.x - 15, y: floatY + 20 });
+                        boss.bullets.push({ x: boss.x + 15, y: floatY + 20 });
+                        boss.lastShot = Date.now();
+                    }
+
+                    // Tirs du Boss (Mouvement + Collision)
+                    boss.bullets.forEach((bb, bbi) => {
+                        bb.y += 5; // Vitesse des lasers ennemis
+                        ctx.fillStyle = '#EF4444'; ctx.shadowBlur = 10; ctx.shadowColor = '#EF4444';
+                        ctx.fillRect(bb.x, bb.y, 4, 15); ctx.shadowBlur = 0;
+                        
+                        // Si un laser touche le joueur
+                        if (bb.y > state.player.y && bb.y < state.player.y + 20 && bb.x > state.player.x && bb.x < state.player.x + 20) {
+                            if (state.hasShield) {
+                                state.hasShield = false; // Le bouclier absorbe le tir
+                                boss.bullets.splice(bbi, 1);
+                            } else {
+                                endGame(false); // Game Over
+                            }
+                        } else if (bb.y > canvas.height) {
+                            boss.bullets.splice(bbi, 1);
+                        }
+                    });
+                } 
+                // --- GESTION DES ENNEMIS NORMAUX (NIVEAUX 1 & 2) ---
+                else {
+                    const enemySpawnRate = state.level === 2 ? 0.055 : 0.04;
+                    if (Math.random() < enemySpawnRate) state.enemies.push({ x: Math.random() * (canvas.width - 30), y: -30 });
+                    
+                    state.enemies.forEach((e, i) => {
+                        e.y += 2.2; ctx.font = '28px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+                        ctx.fillText('👾', e.x, e.y + 25);
+                        
+                        // Tir du joueur sur les petits ennemis
+                        state.bullets.forEach((b, bi) => {
+                            if (b.x > e.x - 5 && b.x < e.x + 25 && b.y > e.y && b.y < e.y + 30) {
+                                state.coins.push({ x: e.x, y: e.y }); 
+                                state.bullets.splice(bi, 1); 
+                                state.enemies.splice(i, 1);
+                            }
+                        });
+                        
+                        // Collision joueur / ennemi
+                        if (e.y + 15 > state.player.y && e.y < state.player.y + 20 && e.x + 15 > state.player.x && e.x < state.player.x + 20) {
+                            if (state.hasShield) {
+                                state.hasShield = false;
+                                state.enemies.splice(i, 1);
+                            } else {
+                                endGame(false);
+                            }
+                        } else if (e.y > canvas.height) {
                             state.enemies.splice(i, 1);
                         }
                     });
-                    
-                    // Collision joueur / ennemi
-                    if (e.y + 15 > state.player.y && e.y < state.player.y + 20 && e.x + 15 > state.player.x && e.x < state.player.x + 20) {
-                        if (state.hasShield) {
-                            state.hasShield = false;
-                            state.enemies.splice(i, 1);
-                        } else {
-                            endGame(false);
-                        }
-                    } else if (e.y > canvas.height) {
-                        state.enemies.splice(i, 1);
-                    }
-                });
+                }
 
-                // Bonus : Boucliers (Tombent UNIQUEMENT au Niveau 2)
+                // --- BONUS (BOUCLIERS) --- (Tombent au LVL 2 et pendant le Boss)
                 if (state.level >= 2 && Math.random() < 0.003) state.powerups.push({ x: Math.random() * (canvas.width - 30), y: -30 });
                 state.powerups.forEach((p, i) => {
                     p.y += 1.8; 
                     ctx.font = '22px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
                     ctx.fillText('🛡️', p.x, p.y + 25);
 
-                    // Joueur ramasse le bouclier
                     if (p.y + 20 > state.player.y && p.y < state.player.y + 20 && p.x + 20 > state.player.x && p.x < state.player.x + 20) {
                         state.hasShield = true;
                         state.powerups.splice(i, 1); 
@@ -226,36 +300,51 @@ export default function App() {
                     }
                 });
 
-                // Pièces et changement de niveau
-                state.coins.forEach((c, i) => {
-                    c.y += 2.5; ctx.fillText('🪙', c.x, c.y + 25);
-                    if (c.y + 20 > state.player.y && c.y < state.player.y + 20 && c.x + 20 > state.player.x && c.x < state.player.x + 20) {
-                        state.coins.splice(i, 1); 
-                        state.score++; 
-                        
-                        // TRANSITION NIVEAU 2
-                        if (state.score === 20 && state.level === 1) {
-                            state.level = 2;
-                            // Fait tomber un bouclier gratuit exactement au milieu en récompense !
-                            state.powerups.push({ x: canvas.width / 2 - 15, y: -30 });
-                            setStatusMsg({ text: "⚠️ LEVEL 2! Enemies approaching faster!", type: "warning" });
+                // --- PIECES --- (Pas de pièces pendant le Boss)
+                if (!state.boss.active) {
+                    state.coins.forEach((c, i) => {
+                        c.y += 2.5; ctx.fillText('🪙', c.x, c.y + 25);
+                        if (c.y + 20 > state.player.y && c.y < state.player.y + 20 && c.x + 20 > state.player.x && c.x < state.player.x + 20) {
+                            state.coins.splice(i, 1); 
+                            state.score++; 
+                            
+                            // TRANSITION NIVEAU 2
+                            if (state.score === 20 && state.level === 1) {
+                                state.level = 2;
+                                state.powerups.push({ x: canvas.width / 2 - 15, y: -30 }); // Bouclier cadeau
+                                setStatusMsg({ text: "⚠️ LEVEL 2! Enemies approaching faster!", type: "warning" });
+                            }
+                            
+                            // TRANSITION BOSS (NIVEAU 3)
+                            if (state.score >= state.TARGET_SCORE && !state.boss.active) {
+                                state.level = 3;
+                                state.boss.active = true;
+                                state.enemies = []; // Nettoyer l'écran
+                                state.coins = [];
+                                setStatusMsg({ text: "🚨 WARNING: MOTHERSHIP APPROACHING! 🚨", type: "error" });
+                            }
+                        } else if (c.y > canvas.height) {
+                            state.coins.splice(i, 1); 
                         }
-                        
-                        if (state.score >= state.TARGET_SCORE) {
-                            endGame(true);
-                        }
-                    } else if (c.y > canvas.height) {
-                        state.coins.splice(i, 1); 
-                    }
-                });
+                    });
+                }
             }
 
-            // HUD UI (Mise à jour avec l'affichage du niveau)
+            // --- HUD UI EN HAUT A GAUCHE ---
             ctx.fillStyle = '#FBBF24'; ctx.font = 'bold 14px Courier New'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-            ctx.fillText(`LVL ${state.level} | TARGETS: ${state.score}/${state.TARGET_SCORE}`, 10, 25);
-            const progress = (state.score / state.TARGET_SCORE) * 100;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fillRect(10, 35, 100, 4);
-            ctx.fillStyle = '#10B981'; ctx.fillRect(10, 35, progress, 4);
+            
+            if (state.boss.active) {
+                ctx.fillStyle = '#EF4444';
+                ctx.fillText(`🚨 BOSS FIGHT 🚨`, 10, 25);
+                const progress = (state.boss.hp / state.boss.maxHp) * 100;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fillRect(10, 35, 100, 4);
+                ctx.fillStyle = '#EF4444'; ctx.fillRect(10, 35, progress, 4);
+            } else {
+                ctx.fillText(`LVL ${state.level} | TARGETS: ${state.score}/${state.TARGET_SCORE}`, 10, 25);
+                const progress = (state.score / state.TARGET_SCORE) * 100;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fillRect(10, 35, 100, 4);
+                ctx.fillStyle = '#10B981'; ctx.fillRect(10, 35, progress, 4);
+            }
 
             requestRef.current = requestAnimationFrame(render);
         };
@@ -330,8 +419,8 @@ export default function App() {
                                     <p className="text-red-500 font-bold text-xl mb-1">HULL DESTROYED 💥</p>
                                     <p className="text-slate-400 text-xs mb-4">Score: {gameState.current.score}</p>
                                 </>
-                            ) : gameState.current.score >= gameState.current.TARGET_SCORE ? (
-                                <p className="text-emerald-400 font-bold text-xl mb-4">OBJECTIVE REACHED!</p>
+                            ) : gameState.current.boss.active && gameState.current.boss.hp <= 0 ? (
+                                <p className="text-emerald-400 font-bold text-xl mb-4">BOSS DESTROYED!</p>
                             ) : (
                                 <p className="text-white font-bold mb-2 text-lg drop-shadow-md">Ready for takeoff?</p>
                             )}
