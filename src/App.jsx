@@ -19,13 +19,15 @@ export default function App() {
         TARGET_SCORE: 40, // 20 pièces LVL 1 + 20 pièces LVL 2 = Boss
         level: 1,
         player: { x: 135, y: 280, targetY: 280, size: 30 },
+        lives: 3,               // NOUVEAU: 3 Vies au départ
+        invincibleUntil: 0,     // NOUVEAU: Temps d'invincibilité après avoir été touché
         hasShield: false,
         bullets: [],
         enemies: [],
         coins: [],
         stars: [],
         powerups: [],
-        // NOUVEAU : Le Boss
+        hearts: [],             // NOUVEAU: Les vies à ramasser
         boss: { active: false, x: 150, y: 60, hp: 30, maxHp: 30, direction: 1, lastShot: 0, bullets: [] },
         keys: { ArrowLeft: false, ArrowRight: false },
         lastShot: 0
@@ -69,11 +71,14 @@ export default function App() {
         gameState.current.player.x = 135;
         gameState.current.player.y = 280;
         gameState.current.player.targetY = 280;
+        gameState.current.lives = 3;
+        gameState.current.invincibleUntil = 0;
         gameState.current.hasShield = false;
         gameState.current.bullets = [];
         gameState.current.enemies = [];
         gameState.current.coins = [];
         gameState.current.powerups = [];
+        gameState.current.hearts = [];
         gameState.current.boss = { active: false, x: 150, y: 60, hp: 30, maxHp: 30, direction: 1, lastShot: 0, bullets: [] };
         
         setGameActive(true);
@@ -87,7 +92,7 @@ export default function App() {
             triggerConfetti();
             setTimeout(() => { setShowWinModal(true); }, 1000);
         } else {
-            setStatusMsg({ text: "Repairs needed... Try again!", type: "error" });
+            setStatusMsg({ text: "GAME OVER ! Try again!", type: "error" });
             gameState.current.player.targetY = 280; 
         }
     };
@@ -120,6 +125,7 @@ export default function App() {
 
         const render = () => {
             const state = gameState.current;
+            const isInvincible = Date.now() < state.invincibleUntil;
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = "white";
@@ -127,12 +133,11 @@ export default function App() {
             // Dessiner les étoiles
             state.stars.forEach(s => {
                 ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
-                s.y += (state.boss.active ? s.speed * 2 : s.speed); // Effet hyper-vitesse pendant le boss
+                s.y += (state.boss.active ? s.speed * 2 : s.speed); 
                 if (s.y > canvas.height) s.y = 0;
             });
 
             if (gameActive) {
-                // Le joueur monte légèrement quand le boss apparaît pour l'effet dramatique
                 state.player.targetY = state.boss.active ? 300 : 280 - (state.score / state.TARGET_SCORE) * 200;
             }
             state.player.y += (state.player.targetY - state.player.y) * 0.05;
@@ -148,32 +153,35 @@ export default function App() {
             }
 
             // --- DESSINER LE JOUEUR ---
-            ctx.save();
-            if (state.hasShield) {
-                ctx.beginPath();
-                ctx.arc(state.player.x + 15, state.player.y + 15, 25, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
-                ctx.fill();
-                ctx.strokeStyle = '#38BDF8';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            }
+            // Le vaisseau clignote 1 frame sur 2 s'il est invincible
+            if (!isInvincible || Math.floor(Date.now() / 150) % 2 === 0) {
+                ctx.save();
+                if (state.hasShield) {
+                    ctx.beginPath();
+                    ctx.arc(state.player.x + 15, state.player.y + 15, 25, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+                    ctx.fill();
+                    ctx.strokeStyle = '#38BDF8';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
 
-            ctx.font = '28px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            let flameY = 41 + Math.sin(Date.now() / 80) * 2; 
-            
-            ctx.save();
-            ctx.translate(state.player.x + 15, state.player.y + flameY); 
-            ctx.rotate(Math.PI); 
-            ctx.fillText('🔥', 0, 0); 
-            ctx.restore();
-            
-            ctx.save();
-            ctx.translate(state.player.x + 15, state.player.y + 15); 
-            ctx.rotate(-45 * Math.PI / 180); 
-            ctx.fillText('🚀', 0, 0); 
-            ctx.restore();
-            ctx.restore();
+                ctx.font = '28px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                let flameY = 41 + Math.sin(Date.now() / 80) * 2; 
+                
+                ctx.save();
+                ctx.translate(state.player.x + 15, state.player.y + flameY); 
+                ctx.rotate(Math.PI); 
+                ctx.fillText('🔥', 0, 0); 
+                ctx.restore();
+                
+                ctx.save();
+                ctx.translate(state.player.x + 15, state.player.y + 15); 
+                ctx.rotate(-45 * Math.PI / 180); 
+                ctx.fillText('🚀', 0, 0); 
+                ctx.restore();
+                ctx.restore();
+            }
 
             if (gameActive) {
                 // --- LOGIQUE DES BALLES DU JOUEUR ---
@@ -192,7 +200,6 @@ export default function App() {
                             state.bullets.splice(index, 1);
                             bulletRemoved = true;
                             
-                            // Explosion si mort !
                             if (state.boss.hp <= 0) {
                                 endGame(true);
                             }
@@ -206,8 +213,7 @@ export default function App() {
                 if (state.boss.active) {
                     const boss = state.boss;
                     
-                    // Déplacement
-                    boss.x += 2.5 * boss.direction;
+                    boss.x += 1.5 * boss.direction; 
                     if (boss.x <= 30) boss.direction = 1;
                     if (boss.x >= canvas.width - 30) boss.direction = -1;
 
@@ -222,13 +228,13 @@ export default function App() {
                     ctx.restore();
 
                     // Barre de vie du Boss
-                    ctx.fillStyle = '#EF4444'; // Rouge de fond
+                    ctx.fillStyle = '#EF4444'; 
                     ctx.fillRect(boss.x - 25, floatY - 40, 50, 4);
-                    ctx.fillStyle = '#10B981'; // Vert par dessus
+                    ctx.fillStyle = '#10B981'; 
                     ctx.fillRect(boss.x - 25, floatY - 40, (boss.hp / boss.maxHp) * 50, 4);
 
-                    // Tirs du Boss (Double laser toutes les 0.6s)
-                    if (Date.now() - boss.lastShot > 600) {
+                    // Tirs du Boss
+                    if (Date.now() - boss.lastShot > 800) { 
                         boss.bullets.push({ x: boss.x - 15, y: floatY + 20 });
                         boss.bullets.push({ x: boss.x + 15, y: floatY + 20 });
                         boss.lastShot = Date.now();
@@ -236,17 +242,27 @@ export default function App() {
 
                     // Tirs du Boss (Mouvement + Collision)
                     boss.bullets.forEach((bb, bbi) => {
-                        bb.y += 5; // Vitesse des lasers ennemis
+                        bb.y += 3.5; 
                         ctx.fillStyle = '#EF4444'; ctx.shadowBlur = 10; ctx.shadowColor = '#EF4444';
                         ctx.fillRect(bb.x, bb.y, 4, 15); ctx.shadowBlur = 0;
                         
                         // Si un laser touche le joueur
                         if (bb.y > state.player.y && bb.y < state.player.y + 20 && bb.x > state.player.x && bb.x < state.player.x + 20) {
-                            if (state.hasShield) {
-                                state.hasShield = false; // Le bouclier absorbe le tir
-                                boss.bullets.splice(bbi, 1);
-                            } else {
-                                endGame(false); // Game Over
+                            if (!isInvincible) {
+                                if (state.hasShield) {
+                                    state.hasShield = false; 
+                                    boss.bullets.splice(bbi, 1);
+                                } else {
+                                    state.lives--;
+                                    if (state.lives > 0) {
+                                        state.invincibleUntil = Date.now() + 2000;
+                                        boss.bullets.splice(bbi, 1);
+                                        boss.hp = boss.maxHp; // LE BOSS SE SOIGNE COMPLETEMENT !
+                                        setStatusMsg({ text: "⚠️ Boss regenerated! Keep fighting!", type: "error" });
+                                    } else {
+                                        endGame(false); 
+                                    }
+                                }
                             }
                         } else if (bb.y > canvas.height) {
                             boss.bullets.splice(bbi, 1);
@@ -273,11 +289,19 @@ export default function App() {
                         
                         // Collision joueur / ennemi
                         if (e.y + 15 > state.player.y && e.y < state.player.y + 20 && e.x + 15 > state.player.x && e.x < state.player.x + 20) {
-                            if (state.hasShield) {
-                                state.hasShield = false;
-                                state.enemies.splice(i, 1);
-                            } else {
-                                endGame(false);
+                            if (!isInvincible) {
+                                if (state.hasShield) {
+                                    state.hasShield = false;
+                                    state.enemies.splice(i, 1);
+                                } else {
+                                    state.lives--;
+                                    if (state.lives > 0) {
+                                        state.invincibleUntil = Date.now() + 2000;
+                                        state.enemies.splice(i, 1);
+                                    } else {
+                                        endGame(false);
+                                    }
+                                }
                             }
                         } else if (e.y > canvas.height) {
                             state.enemies.splice(i, 1);
@@ -285,7 +309,7 @@ export default function App() {
                     });
                 }
 
-                // --- BONUS (BOUCLIERS) --- (Tombent au LVL 2 et pendant le Boss)
+                // --- BONUS (BOUCLIERS) ---
                 if (state.level >= 2 && Math.random() < 0.003) state.powerups.push({ x: Math.random() * (canvas.width - 30), y: -30 });
                 state.powerups.forEach((p, i) => {
                     p.y += 1.8; 
@@ -300,7 +324,22 @@ export default function App() {
                     }
                 });
 
-                // --- PIECES --- (Pas de pièces pendant le Boss)
+                // --- BONUS (COEURS / VIES) ---
+                if (Math.random() < 0.0015) state.hearts.push({ x: Math.random() * (canvas.width - 30), y: -30 });
+                state.hearts.forEach((h, i) => {
+                    h.y += 2.0; 
+                    ctx.font = '22px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+                    ctx.fillText('💖', h.x, h.y + 25);
+
+                    if (h.y + 20 > state.player.y && h.y < state.player.y + 20 && h.x + 20 > state.player.x && h.x < state.player.x + 20) {
+                        if (state.lives < 5) state.lives++; // Max 5 vies
+                        state.hearts.splice(i, 1); 
+                    } else if (h.y > canvas.height) {
+                        state.hearts.splice(i, 1); 
+                    }
+                });
+
+                // --- PIECES --- 
                 if (!state.boss.active) {
                     state.coins.forEach((c, i) => {
                         c.y += 2.5; ctx.fillText('🪙', c.x, c.y + 25);
@@ -308,18 +347,16 @@ export default function App() {
                             state.coins.splice(i, 1); 
                             state.score++; 
                             
-                            // TRANSITION NIVEAU 2
                             if (state.score === 20 && state.level === 1) {
                                 state.level = 2;
-                                state.powerups.push({ x: canvas.width / 2 - 15, y: -30 }); // Bouclier cadeau
+                                state.powerups.push({ x: canvas.width / 2 - 15, y: -30 }); 
                                 setStatusMsg({ text: "⚠️ LEVEL 2! Enemies approaching faster!", type: "warning" });
                             }
                             
-                            // TRANSITION BOSS (NIVEAU 3)
                             if (state.score >= state.TARGET_SCORE && !state.boss.active) {
                                 state.level = 3;
                                 state.boss.active = true;
-                                state.enemies = []; // Nettoyer l'écran
+                                state.enemies = []; 
                                 state.coins = [];
                                 setStatusMsg({ text: "🚨 WARNING: MOTHERSHIP APPROACHING! 🚨", type: "error" });
                             }
@@ -330,7 +367,7 @@ export default function App() {
                 }
             }
 
-            // --- HUD UI EN HAUT A GAUCHE ---
+            // --- HUD UI EN HAUT ---
             ctx.fillStyle = '#FBBF24'; ctx.font = 'bold 14px Courier New'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
             
             if (state.boss.active) {
@@ -345,6 +382,10 @@ export default function App() {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fillRect(10, 35, 100, 4);
                 ctx.fillStyle = '#10B981'; ctx.fillRect(10, 35, progress, 4);
             }
+
+            // Affichage des Vies en haut à droite
+            ctx.fillStyle = '#EF4444'; ctx.font = '16px Arial'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+            ctx.fillText('❤️'.repeat(state.lives), canvas.width - 10, 25);
 
             requestRef.current = requestAnimationFrame(render);
         };
@@ -414,7 +455,7 @@ export default function App() {
                         
                         {!gameActive && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/60 rounded-xl pointer-events-none">
-                            {gameState.current.score > 0 && gameState.current.score < gameState.current.TARGET_SCORE ? (
+                            {gameState.current.score > 0 && gameState.current.score < gameState.current.TARGET_SCORE && gameState.current.lives === 0 ? (
                                 <>
                                     <p className="text-red-500 font-bold text-xl mb-1">HULL DESTROYED 💥</p>
                                     <p className="text-slate-400 text-xs mb-4">Score: {gameState.current.score}</p>
