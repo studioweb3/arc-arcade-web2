@@ -19,15 +19,14 @@ export default function App() {
         TARGET_SCORE: 40, // 20 pièces LVL 1 + 20 pièces LVL 2 = Boss
         level: 1,
         player: { x: 135, y: 280, targetY: 280, size: 30 },
-        lives: 3,               // NOUVEAU: 3 Vies au départ
-        invincibleUntil: 0,     // NOUVEAU: Temps d'invincibilité après avoir été touché
+        lives: 3,               // 3 Vies au départ
+        invincibleUntil: 0,     // Temps d'invincibilité après avoir été touché
         hasShield: false,
         bullets: [],
         enemies: [],
         coins: [],
         stars: [],
         powerups: [],
-        hearts: [],             // NOUVEAU: Les vies à ramasser
         boss: { active: false, x: 150, y: 60, hp: 30, maxHp: 30, direction: 1, lastShot: 0, bullets: [] },
         keys: { ArrowLeft: false, ArrowRight: false },
         lastShot: 0
@@ -78,7 +77,6 @@ export default function App() {
         gameState.current.enemies = [];
         gameState.current.coins = [];
         gameState.current.powerups = [];
-        gameState.current.hearts = [];
         gameState.current.boss = { active: false, x: 150, y: 60, hp: 30, maxHp: 30, direction: 1, lastShot: 0, bullets: [] };
         
         setGameActive(true);
@@ -309,8 +307,8 @@ export default function App() {
                     });
                 }
 
-                // --- BONUS (BOUCLIERS) ---
-                if (state.level >= 2 && Math.random() < 0.003) state.powerups.push({ x: Math.random() * (canvas.width - 30), y: -30 });
+                // --- BONUS (BOUCLIERS) --- (Tombent 3x moins souvent)
+                if (state.level >= 2 && Math.random() < 0.001) state.powerups.push({ x: Math.random() * (canvas.width - 30), y: -30 });
                 state.powerups.forEach((p, i) => {
                     p.y += 1.8; 
                     ctx.font = '22px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
@@ -321,21 +319,6 @@ export default function App() {
                         state.powerups.splice(i, 1); 
                     } else if (p.y > canvas.height) {
                         state.powerups.splice(i, 1); 
-                    }
-                });
-
-                // --- BONUS (COEURS / VIES) ---
-                if (Math.random() < 0.0015) state.hearts.push({ x: Math.random() * (canvas.width - 30), y: -30 });
-                state.hearts.forEach((h, i) => {
-                    h.y += 2.0; 
-                    ctx.font = '22px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-                    ctx.fillText('💖', h.x, h.y + 25);
-
-                    if (h.y + 20 > state.player.y && h.y < state.player.y + 20 && h.x + 20 > state.player.x && h.x < state.player.x + 20) {
-                        if (state.lives < 5) state.lives++; // Max 5 vies
-                        state.hearts.splice(i, 1); 
-                    } else if (h.y > canvas.height) {
-                        state.hearts.splice(i, 1); 
                     }
                 });
 
